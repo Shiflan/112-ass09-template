@@ -35,8 +35,9 @@
 int *alloc_ints(size_t count)
 {
     // TODO
-    (void)count;
-    return NULL;
+    if (count == 0)
+        return NULL;
+    return malloc(count * sizeof(int));
 }
 
 /*
@@ -49,8 +50,9 @@ int *alloc_ints(size_t count)
 int *alloc_zeroed_ints(size_t count)
 {
     // TODO
-    (void)count;
-    return NULL;
+    if (count == 0)
+        return NULL;
+    return calloc(count, sizeof(int));
 }
 
 /*
@@ -66,7 +68,14 @@ int *alloc_zeroed_ints(size_t count)
 void safe_free(void **ptr)
 {
     // TODO
-    (void)ptr;
+    if (ptr == NULL)
+        return;
+    if (*ptr != NULL)
+    {
+        free(*ptr);
+        *ptr = NULL;
+    }
+    
 }
 
 /*
@@ -85,10 +94,22 @@ void safe_free(void **ptr)
 int *resize_ints(int *arr, size_t old_count, size_t new_count)
 {
     // TODO
-    (void)arr;
-    (void)old_count;
-    (void)new_count;
-    return NULL;
+    if (new_count == 0)
+    {
+        safe_free((void **)&arr);
+        return NULL;
+    }
+    {
+        if (arr == NULL)
+            return alloc_zeroed_ints(new_count);
+
+        int *temp = realloc(arr, new_count * sizeof(int));
+        if (temp == NULL)
+            return NULL;
+        if (new_count > old_count)
+            memset(temp + old_count, 0, (new_count - old_count) * sizeof(int));
+        return temp;
+    }
 }
 
 /*
@@ -102,9 +123,13 @@ int *resize_ints(int *arr, size_t old_count, size_t new_count)
 int *duplicate_ints(const int *src, size_t count)
 {
     // TODO
-    (void)src;
-    (void)count;
-    return NULL;
+    if (src == NULL || count == 0)
+        return NULL;
+    int *copy = malloc(count * sizeof(int));
+    if (copy == NULL)
+        return NULL;
+    memcpy(copy, src, count * sizeof(int));
+    return copy;
 }
 
 /* ======================================================================
@@ -128,8 +153,21 @@ int *duplicate_ints(const int *src, size_t count)
 ByteBuffer *buffer_create(size_t capacity)
 {
     // TODO
-    (void)capacity;
-    return NULL;
+    if (capacity == 0)
+        return NULL;
+    ByteBuffer *buf = malloc(sizeof(ByteBuffer));
+    if (buf == NULL)
+        return NULL;
+    buf->data = malloc(capacity);
+    if (buf->data == NULL)
+    {
+        free(buf);
+        return NULL;
+    }
+    buf->size = 0;
+    buf->capacity = capacity;
+    memset(buf->data, 0, capacity);
+    return buf;
 }
 
 /*
@@ -147,9 +185,23 @@ ByteBuffer *buffer_create(size_t capacity)
 bool buffer_reserve(ByteBuffer *buf, size_t min_capacity)
 {
     // TODO
-    (void)buf;
-    (void)min_capacity;
-    return false;
+    size_t new_capacity;
+    unsigned char *new_data;
+
+    if (buf == NULL)
+        return false;
+    if (min_capacity <= buf->capacity)
+        return true;
+    new_capacity = buf->capacity;
+    while (new_capacity < min_capacity)
+        new_capacity *= 2;
+    new_data = realloc(buf->data, new_capacity);
+    if (new_data == NULL)
+        return false;
+    memset(new_data + buf->capacity, 0, new_capacity - buf->capacity);
+    buf->data = new_data;
+    buf->capacity = new_capacity;
+    return true;
 }
 
 /*
@@ -165,10 +217,17 @@ bool buffer_reserve(ByteBuffer *buf, size_t min_capacity)
 bool buffer_append(ByteBuffer *buf, const void *data, size_t n)
 {
     // TODO
-    (void)buf;
-    (void)data;
-    (void)n;
-    return false;
+    size_t old_size;
+    if (buf == NULL || (data == NULL && n > 0))
+        return false;
+    if (n == 0) 
+        return true;
+    old_size = buf->size;
+    if (!buffer_reserve(buf, old_size + n))
+        return false;
+    memcpy(buf->data + old_size, data, n);
+    buf->size = old_size + n;
+    return true;
 }
 
 /*
@@ -180,9 +239,7 @@ bool buffer_append(ByteBuffer *buf, const void *data, size_t n)
 bool buffer_append_byte(ByteBuffer *buf, unsigned char byte)
 {
     // TODO
-    (void)buf;
-    (void)byte;
-    return false;
+    return buffer_append(buf, &byte, 1);
 }
 
 /*
@@ -197,9 +254,9 @@ bool buffer_append_byte(ByteBuffer *buf, unsigned char byte)
 bool buffer_append_string(ByteBuffer *buf, const char *str)
 {
     // TODO
-    (void)buf;
-    (void)str;
-    return false;
+    if (str == NULL)
+        return false;
+    return buffer_append(buf, str, strlen(str));
 }
 
 /*
@@ -213,10 +270,12 @@ bool buffer_append_string(ByteBuffer *buf, const char *str)
 
 int buffer_find(const ByteBuffer *buf, unsigned char byte)
 {
-    // TODO
-    (void)buf;
-    (void)byte;
-    return -1;
+    if (buf == NULL)
+        return -1;
+    unsigned char *found = memchr(buf->data, byte, buf->size);
+    if (found == NULL)
+        return -1;
+    return (int)(found - buf->data);
 }
 
 /*
@@ -229,10 +288,14 @@ int buffer_find(const ByteBuffer *buf, unsigned char byte)
 
 bool buffer_equals(const ByteBuffer *a, const ByteBuffer *b)
 {
-    // TODO
-    (void)a;
-    (void)b;
-    return false;
+    if (a == NULL || b == NULL)
+        return false;
+    if (a->size != b->size)
+        return false;
+    if (a->size == 0)
+        return true;
+    return memcmp(a->data, b->data, a->size) == 0;
+
 }
 
 /*
@@ -251,11 +314,18 @@ bool buffer_equals(const ByteBuffer *a, const ByteBuffer *b)
 bool buffer_insert(ByteBuffer *buf, size_t pos, const void *data, size_t n)
 {
     // TODO
-    (void)buf;
-    (void)pos;
-    (void)data;
-    (void)n;
-    return false;
+    size_t old_size;
+    if (buf == NULL || (data == NULL && n > 0) || pos > buf->size)
+        return false;
+    if (n == 0)
+        return true;
+    old_size = buf->size;
+    if (!buffer_reserve(buf, old_size + n))
+        return false;
+    memmove(buf->data + pos + n, buf->data + pos, old_size - pos);
+    memcpy(buf->data + pos, data, n);
+    buf->size = old_size + n;
+    return true;
 }
 
 /*
@@ -272,10 +342,14 @@ bool buffer_insert(ByteBuffer *buf, size_t pos, const void *data, size_t n)
 bool buffer_remove(ByteBuffer *buf, size_t pos, size_t n)
 {
     // TODO
-    (void)buf;
-    (void)pos;
-    (void)n;
-    return false;
+    if (buf == NULL || pos > buf->size || n > buf->size - pos)
+        return false;
+    if (n == 0)
+        return true;
+    memmove(buf->data + pos, buf->data + pos + n, buf->size - pos - n);
+    memset(buf->data + buf->size - n, 0, n);
+    buf->size -= n;
+    return true;
 }
 
 /*
@@ -287,8 +361,10 @@ bool buffer_remove(ByteBuffer *buf, size_t pos, size_t n)
 
 void buffer_clear(ByteBuffer *buf)
 {
-    // TODO
-    (void)buf;
+    if (buf == NULL)
+        return;
+    buf->size = 0;
+    memset(buf->data, 0, buf->capacity);
 }
 
 /*
@@ -303,7 +379,11 @@ void buffer_clear(ByteBuffer *buf)
 void buffer_destroy(ByteBuffer **buf)
 {
     // TODO
-    (void)buf;
+    if (buf == NULL || *buf == NULL)
+        return;
+    free((*buf)->data);
+    free(*buf);
+    *buf = NULL;
 }
 
 /* ======================================================================
@@ -323,8 +403,14 @@ void buffer_destroy(ByteBuffer **buf)
 ByteBuffer *buffer_clone(const ByteBuffer *src)
 {
     // TODO
-    (void)src;
-    return NULL;
+    if (src == NULL)
+        return NULL;
+    ByteBuffer *clone = buffer_create(src->capacity);
+    if (clone == NULL)
+        return NULL;
+    memcpy(clone->data, src->data, src->size);
+    clone->size = src->size;
+    return clone;
 }
 
 /*
@@ -340,9 +426,17 @@ ByteBuffer *buffer_clone(const ByteBuffer *src)
 ByteBuffer *buffer_concat(const ByteBuffer *a, const ByteBuffer *b)
 {
     // TODO
-    (void)a;
-    (void)b;
-    return NULL;
+    if (a == NULL || b == NULL)
+        return NULL;
+    size_t total_size = a->size + b->size;
+    if (total_size == 0)
+        total_size = 1;
+    ByteBuffer *result = buffer_create(total_size);
+    if (result == NULL)
+        return NULL;
+    buffer_append(result, a->data, a->size);
+    buffer_append(result, b->data, b->size);
+    return result;
 }
 
 /*
@@ -356,9 +450,19 @@ ByteBuffer *buffer_concat(const ByteBuffer *a, const ByteBuffer *b)
 size_t buffer_count(const ByteBuffer *buf, unsigned char byte)
 {
     // TODO
-    (void)buf;
-    (void)byte;
-    return 0;
+    if (buf == NULL)
+        return 0;
+    size_t count = 0;
+    const unsigned char *ptr = buf->data;
+    const unsigned char *end = buf->data + buf->size;
+    while (ptr < end) {
+        ptr = memchr(ptr, byte, end - ptr);
+        if (ptr == NULL)
+            break;
+        count++;
+        ptr++;
+    }
+    return count;
 }
 
 /*
@@ -374,8 +478,19 @@ size_t buffer_count(const ByteBuffer *buf, unsigned char byte)
 bool buffer_shrink_to_fit(ByteBuffer *buf)
 {
     // TODO
-    (void)buf;
-    return false;
+    if (buf == NULL)
+        return false;
+    size_t new_capacity = buf->size;
+    if (new_capacity == 0)
+        new_capacity = 1;
+    if (new_capacity == buf->capacity)
+        return true;
+    unsigned char *temp = realloc(buf->data, new_capacity);
+    if (temp == NULL)
+        return false;
+    buf->data = temp;
+    buf->capacity = new_capacity;
+    return true;
 }
 
 /*
@@ -402,10 +517,48 @@ bool buffer_shrink_to_fit(ByteBuffer *buf)
 char **buffer_split(const ByteBuffer *buf, unsigned char delim, size_t *out_count)
 {
     // TODO
-    (void)buf;
-    (void)delim;
-    (void)out_count;
-    return NULL;
+    if (buf == NULL || out_count == NULL)
+        return NULL;
+    *out_count = 0;
+    size_t token_count = 1;
+    size_t capacity = 4;
+    char **tokens = malloc(capacity * sizeof(char *));
+    if (tokens == NULL)
+        return NULL;
+    const unsigned char *ptr = buf->data;
+    const unsigned char *end = buf->data + buf->size;
+    while (ptr < end) {
+        const unsigned char *token_start = ptr;
+        ptr = memchr(ptr, delim, end - ptr);
+        if (ptr == NULL)
+            ptr = end;
+        size_t token_len = ptr - token_start;
+        char *token = malloc(token_len + 1);
+        if (token == NULL) {
+            for (size_t i = 0; i < token_count - 1; i++)
+                free(tokens[i]);
+            free(tokens);
+            return NULL;
+        }
+        memcpy(token, token_start, token_len);
+        token[token_len] = '\0';
+        tokens[token_count - 1] = token;
+        token_count++;
+        if (token_count > capacity) {
+            capacity *= 2;
+            char **new_tokens = realloc(tokens, capacity * sizeof(char *));
+            if (new_tokens == NULL) {
+                for (size_t i = 0; i < token_count - 1; i++)
+                    free(tokens[i]);
+                free(tokens);
+                return NULL;
+            }
+            tokens = new_tokens;
+        }
+        ptr++;
+    }
+    *out_count = token_count;
+    return tokens;
 }
 
 /*
@@ -420,6 +573,10 @@ char **buffer_split(const ByteBuffer *buf, unsigned char delim, size_t *out_coun
 void free_tokens(char ***tokens, size_t count)
 {
     // TODO
-    (void)tokens;
-    (void)count;
+    if (tokens == NULL || *tokens == NULL)
+        return;
+    for (size_t i = 0; i < count; i++)
+        free((*tokens)[i]);
+    free(*tokens);
+    *tokens = NULL;
 }
