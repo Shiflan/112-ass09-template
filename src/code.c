@@ -516,49 +516,75 @@ bool buffer_shrink_to_fit(ByteBuffer *buf)
 
 char **buffer_split(const ByteBuffer *buf, unsigned char delim, size_t *out_count)
 {
-    // TODO
-    if (buf == NULL || out_count == NULL)
+    if (out_count == NULL)
         return NULL;
+
     *out_count = 0;
-    size_t token_count = 1;
+
+    if (buf == NULL)
+        return NULL;
+
     size_t capacity = 4;
+    size_t count = 0;
+
     char **tokens = malloc(capacity * sizeof(char *));
     if (tokens == NULL)
         return NULL;
+
     const unsigned char *ptr = buf->data;
     const unsigned char *end = buf->data + buf->size;
-    while (ptr < end) {
-        const unsigned char *token_start = ptr;
-        ptr = memchr(ptr, delim, end - ptr);
-        if (ptr == NULL)
-            ptr = end;
-        size_t token_len = ptr - token_start;
+
+    while (1)
+    {
+        const unsigned char *found = memchr(ptr, delim, end - ptr);
+
+        const unsigned char *token_end =
+            (found != NULL) ? found : end;
+
+        size_t token_len = token_end - ptr;
+
         char *token = malloc(token_len + 1);
-        if (token == NULL) {
-            for (size_t i = 0; i < token_count - 1; i++)
-                free(tokens[i]);
-            free(tokens);
-            return NULL;
-        }
-        memcpy(token, token_start, token_len);
+
+        if (token == NULL)
+            goto cleanup;
+
+        memcpy(token, ptr, token_len);
         token[token_len] = '\0';
-        tokens[token_count - 1] = token;
-        token_count++;
-        if (token_count > capacity) {
-            capacity *= 2;
-            char **new_tokens = realloc(tokens, capacity * sizeof(char *));
-            if (new_tokens == NULL) {
-                for (size_t i = 0; i < token_count - 1; i++)
-                    free(tokens[i]);
-                free(tokens);
-                return NULL;
+
+        if (count == capacity)
+        {
+            size_t new_capacity = capacity * 2;
+
+            char **temp = realloc(tokens,
+                                  new_capacity * sizeof(char *));
+
+            if (temp == NULL)
+            {
+                free(token);
+                goto cleanup;
             }
-            tokens = new_tokens;
+
+            tokens = temp;
+            capacity = new_capacity;
         }
-        ptr++;
+
+        tokens[count++] = token;
+
+        if (found == NULL)
+            break;
+
+        ptr = found + 1;
     }
-    *out_count = token_count;
+
+    *out_count = count;
     return tokens;
+
+cleanup:
+    for (size_t i = 0; i < count; i++)
+        free(tokens[i]);
+
+    free(tokens);
+    return NULL;
 }
 
 /*
